@@ -1,27 +1,41 @@
-# 🦾 FORGE — Virtual Software Team for OpenClaw
+# 🦾 FORGE — Virtual Software Team for OpenClaw (v2)
 
-A complete 4-agent AI software team that lives in **OpenClaw** and communicates through **Telegram**, powered by **GLM-4**.
+A team of **4 world-class AI agents** (each with 12-15+ years of domain expertise) that lives in **OpenClaw**, collaborates visibly through **Telegram group chat**, and is powered by **GLM-4**.
 
 ```
 You (Telegram) ←→ FORGE Orchestrator
                       ↓
-              ┌───────────────────┐
-              │  PM Agent         │ → BRD, SOW, FSD
-              │  Architect Agent  │ → Tech Design, Handoff
-              │  Developer Agent  │ → Source Code
-              │  Tester Agent     │ → Bug Reports, Results
-              └───────────────────┘
+              ┌───────────────────────────────┐
+              │  📋 PM (12yr)       → BRD, SOW, FSD           │
+              │  🏗️ Architect (15yr) → Battle-tested Design    │
+              │  💻 Developer (15yr) → Security-first Code     │
+              │  🧪 Tester (15yr)    → OWASP + 5-Gate QA      │
+              └───────────────────────────────┘
+                      ↓
+              💬 Telegram Group Chat
+              (watch all bots collaborate in real-time)
 ```
+
+---
+
+## What Makes This Team Special
+
+| Agent | Expertise | What They Do That Generic Bots Don't |
+|---|---|---|
+| **PM** | 12+ years product management | Uncovers REAL requirements (not just stated ones), MoSCoW + RICE prioritization, Given/When/Then acceptance criteria |
+| **Architect** | 15+ years system design | Failure mode analysis for every component, database/architecture/API selection matrices, scalability roadmap |
+| **Developer** | 15+ years engineering | OWASP-aware security-first coding, retry/circuit breaker patterns, cursor pagination, N+1 prevention, proper error handling |
+| **Tester** | 15+ years QA/security | 5-gate quality process: static analysis → security audit → functional testing → integration → performance |
 
 ---
 
 ## Prerequisites
 
-- Linux (Ubuntu/Debian recommended)
+- Linux or macOS
 - Node.js ≥ 22 (`node --version`)
 - OpenClaw installed: `npm install -g openclaw@latest`
-- OpenClaw onboarded: `openclaw onboard` (at least partially)
-- A Telegram bot token from [@BotFather](https://t.me/BotFather)
+- OpenClaw onboarded: `openclaw onboard`
+- **5 Telegram bot tokens** from [@BotFather](https://t.me/BotFather) (one per agent)
 - A GLM-4 API key from [open.bigmodel.cn](https://open.bigmodel.cn) or [z.ai](https://z.ai)
 
 ---
@@ -33,7 +47,11 @@ chmod +x setup.sh
 ./setup.sh
 ```
 
-The script will ask for your API key and Telegram token, then install everything.
+The script will:
+1. Collect your API key and 5 bot tokens
+2. Optionally set up Telegram group chat collaboration
+3. Install world-class agent prompts
+4. Configure OpenClaw with all agents and channels
 
 ---
 
@@ -47,7 +65,7 @@ openclaw gateway
 openclaw gateway start
 ```
 
-Then message your Telegram bot. It will respond as **FORGE**.
+Then message your FORGE Orchestrator bot on Telegram. It will respond as **FORGE**.
 
 ---
 
@@ -64,21 +82,21 @@ FORGE will start the PM agent to interview you about requirements.
 ### Pipeline Flow
 
 ```
-1. PM Interview (5-10 min chat)
+1. PM Interview (5-15 min chat)
        ↓ You approve BRD/SOW/FSD
 2. Architect Design (automated)
        ↓ You approve architecture  
 3. Developer builds code (automated, module by module)
-   ↔ Tester tests each module (auto-loop)
+   ↔ Tester tests each module (5-gate quality check, auto-loop)
        ↓ You approve final delivery
-4. Done — code is in your workspace
+4. Done — production-ready code in your workspace
 ```
 
 ### Approval Commands
 
 At each stage you'll get a summary and options:
 - ✅ `/approve` — proceed to next stage
-- 🔄 `/changes [feedback]` — request revisions (e.g., `/changes please add user authentication`)
+- 🔄 `/changes [feedback]` — request revisions
 - ❌ `/reject [reason]` — stop and discuss
 
 ### Other Commands
@@ -93,19 +111,57 @@ At each stage you'll get a summary and options:
 
 ---
 
+## 💬 Telegram Group Chat (The Magic)
+
+This is the killer feature: add all 5 bots to a Telegram group and **watch them collaborate in real-time**.
+
+### Setup
+
+1. **Create a Telegram group** (e.g., "FORGE Team")
+2. **Add all 5 bots** to the group
+3. **Give each bot admin rights** (so they can send messages)
+4. **Get the Group Chat ID:**
+   ```
+   # Send any message in the group, then:
+   curl https://api.telegram.org/bot<FORGE_BOT_TOKEN>/getUpdates | jq '.result[-1].message.chat.id'
+   ```
+   The ID is a negative number like `-1001234567890`
+5. **Run setup.sh** and enter the Group Chat ID when prompted
+   (or add it to `~/.openclaw/openclaw.json` manually)
+
+### What You'll See
+
+Once set up, the bots post in the group as they work:
+
+```
+📋 PM: Starting requirements interview for "TaskBot"...
+📋 PM: ✅ Requirements complete. BRD, SOW, FSD ready.
+🏗️ Architect: Designing system architecture...
+🏗️ Architect: ✅ Architecture locked. SQLite + python-telegram-bot.
+💻 Developer: Building Module 1 (database layer)...
+💻 Developer: ✅ Module 1 complete. Handing to Tester.
+🧪 Tester: Running 5-gate quality check on Module 1...
+🧪 Tester: ❌ 2 bugs found (1 High, 1 Medium). Sending to Developer.
+💻 Developer: ✅ Fixes applied. Ready for re-test.
+🧪 Tester: ✅ Module 1 ALL PASS. 12 criteria verified.
+🎉 FORGE: ALL MODULES PASSED! Ready for delivery review.
+```
+
+---
+
 ## File Structure
 
 ```
 ~/.openclaw/
-├── openclaw.json              ← Main config (GLM-4, Telegram, named agents)
+├── openclaw.json              ← Main config (GLM-4, Telegram, agents, group chat)
 └── workspace/
-    ├── SOUL.md                ← FORGE personality
-    ├── AGENTS.md              ← Orchestrator behavior
+    ├── SOUL.md                ← FORGE personality (orchestrator)
+    ├── AGENTS.md              ← Orchestrator behavior + group chat protocol
     ├── agents/
-    │   ├── pm.md              ← PM agent system prompt
-    │   ├── architect.md       ← Architect agent system prompt
-    │   ├── developer.md       ← Developer agent system prompt
-    │   └── tester.md          ← Tester agent system prompt
+    │   ├── pm.md              ← PM: 12yr expert, deep requirements discovery
+    │   ├── architect.md       ← Architect: 15yr expert, failure-mode design
+    │   ├── developer.md       ← Developer: 15yr expert, security-first code
+    │   └── tester.md          ← Tester: 15yr expert, OWASP + 5-gate QA
     ├── skills/
     │   ├── virtual-team-orchestrator/SKILL.md
     │   ├── project-state/SKILL.md
@@ -116,24 +172,47 @@ At each stage you'll get a summary and options:
     └── projects/
         └── proj-[timestamp]/
             ├── project.json   ← Pipeline state
-            ├── pm/            ← BRD, SOW, FSD
-            ├── architect/     ← Tech design docs
-            ├── developer/     ← Source code
-            └── tester/        ← Test reports
+            ├── pm/            ← BRD, SOW, FSD (Given/When/Then criteria)
+            ├── architect/     ← Tech design + failure mode analysis
+            ├── developer/     ← Production-ready source code
+            └── tester/        ← Test reports + security audit results
 ```
+
+---
+
+## Agent Quality Highlights
+
+### Developer writes code like this:
+- ✅ Parameterized SQL queries (no injection)
+- ✅ Retry with exponential backoff on external calls
+- ✅ Cursor-based pagination (stable under concurrent writes)
+- ✅ Proper error boundaries with specific exception handling
+- ✅ Environment variables for ALL secrets (fail-fast if missing)
+- ✅ Type hints on every function
+
+### Tester runs 5 quality gates:
+1. **Static Analysis** — syntax, imports, types, code quality
+2. **Security Audit** — SQL injection, XSS, hardcoded secrets, input validation
+3. **Functional Testing** — happy path + systematic edge cases
+4. **Integration Check** — module interfaces, data model consistency
+5. **Performance** — N+1 queries, pagination, resource cleanup
+
+### Architect designs for reality:
+- Every component has a documented failure mode and recovery strategy
+- Database selection backed by requirements (not opinion)
+- Scalability roadmap: "here's what to do when you outgrow v1"
+- Security architecture from day 1 (auth, tokens, RBAC)
 
 ---
 
 ## GLM-4 Configuration Notes
 
-FORGE uses **GLM-4** as the primary model for all 4 agents, with **GLM-4-Air** as fallback.
+FORGE uses **GLM-4** as the primary model for all agents, with **GLM-4-Air** as fallback.
 
 | Platform | Base URL | When to use |
 |---|---|---|
 | Zhipu AI | `https://open.bigmodel.cn/api/paas/v4` | If you have a Zhipu key |
 | Z.AI | `https://api.z.ai/api/paas/v4` | If you have a Z.AI key |
-
-The setup script detects which you're using. If you need to switch later, edit `~/.openclaw/openclaw.json` and update the `baseUrl` in `models.providers`.
 
 ---
 
@@ -145,60 +224,28 @@ openclaw doctor --fix
 openclaw logs
 ```
 
+**Bots not posting in group chat:**
+- Verify all 5 bots have admin rights in the group
+- Check the Group Chat ID is correct (negative number)
+- Verify `channels.telegram.groupChat.enabled` is `true` in `openclaw.json`
+
 **GLM API authentication error:**
 ```bash
-# Check your API key is set correctly
 cat ~/.openclaw/openclaw.json | grep apiKey
-# Re-run setup if wrong
-./setup.sh
+./setup.sh  # Re-run if wrong
 ```
 
 **Agent not spawning:**
 ```bash
-# Verify named agents are configured
 openclaw config get agents.named
 ```
 
 **Reset everything:**
 ```bash
-# Backup current config
 cp ~/.openclaw/openclaw.json ~/.openclaw/openclaw.json.bak
-# Re-run setup
 ./setup.sh
 ```
 
 ---
 
-## Adding More Telegram Bots (Optional)
-
-If you want each agent to have its own Telegram bot token, edit `openclaw.json`:
-
-```json
-"channels": {
-  "telegram": {
-    "accounts": {
-      "main":      { "token": "YOUR_MAIN_BOT_TOKEN" },
-      "pm":        { "token": "YOUR_PM_BOT_TOKEN" },
-      "architect": { "token": "YOUR_ARCHITECT_BOT_TOKEN" },
-      "developer": { "token": "YOUR_DEV_BOT_TOKEN" },
-      "tester":    { "token": "YOUR_TESTER_BOT_TOKEN" }
-    }
-  }
-}
-```
-
-Then add `"channel": "pm"` to each named agent config.
-
----
-
-## Architecture Notes
-
-- **Single process** — One OpenClaw gateway manages all 4 agents
-- **Sub-agents** — Each agent is a named OpenClaw session spawned with `sessions_spawn`
-- **Shared state** — `project.json` in each project folder tracks pipeline stage
-- **No external services** — No Redis, no separate processes, no database server needed
-- **File-based artifacts** — All PM docs, architecture, code, and test reports saved as files
-
----
-
-Built with OpenClaw 🦞 + GLM-4 🤖
+Built with OpenClaw 🦞 + GLM-4 🤖 — World-class AI agents, not generic bots.

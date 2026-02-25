@@ -100,6 +100,10 @@
         "tester": {
           "token": "YOUR_TESTER_BOT_TOKEN"
         }
+      },
+      "groupChat": {
+        "enabled": true,
+        "chatId": "YOUR_TELEGRAM_GROUP_CHAT_ID"
       }
     }
   },

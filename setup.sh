@@ -2,6 +2,7 @@
 # ============================================================
 #  FORGE Virtual Team — OpenClaw Setup Script
 #  Run this ONCE to install the 4-agent software team
+#  with Telegram group chat collaboration
 # ============================================================
 
 set -e
@@ -19,9 +20,10 @@ BOLD='\033[1m'
 NC='\033[0m'
 
 echo ""
-echo -e "${BLUE}${BOLD}╔══════════════════════════════════════════╗${NC}"
-echo -e "${BLUE}${BOLD}║   FORGE Virtual Team — Setup Installer   ║${NC}"
-echo -e "${BLUE}${BOLD}╚══════════════════════════════════════════╝${NC}"
+echo -e "${BLUE}${BOLD}╔══════════════════════════════════════════════╗${NC}"
+echo -e "${BLUE}${BOLD}║   FORGE Virtual Team — Setup Installer v2   ║${NC}"
+echo -e "${BLUE}${BOLD}║   🔥 World-Class AI Agents + Group Chat     ║${NC}"
+echo -e "${BLUE}${BOLD}╚══════════════════════════════════════════════╝${NC}"
 echo ""
 
 # ── Verify OpenClaw is installed ────────────────────────────
@@ -53,15 +55,15 @@ echo ""
 echo -e "${BOLD}🤖 Telegram Bot Tokens${NC}"
 echo "──────────────────────────────────────────"
 echo "You need 5 bots. Create them all at @BotFather with /newbot"
-echo "Suggested names and usernames:"
+echo "Each bot becomes a team member with its own identity:"
 echo ""
-echo "  1. FORGE Orchestrator  → e.g. @ForgeOrchestratorBot  (talks to YOU)"
-echo "  2. Project Manager     → e.g. @ForgePMBot             (requirements & docs)"
-echo "  3. Architect           → e.g. @ForgeArchitectBot      (system design)"
-echo "  4. Developer           → e.g. @ForgeDevBot            (writes code)"
-echo "  5. Tester              → e.g. @ForgeQABot             (tests & bugs)"
+echo "  1. FORGE Orchestrator  → e.g. @ForgeOrchestratorBot  (talks to YOU, coordinates team)"
+echo "  2. Project Manager     → e.g. @ForgePMBot             (12+ yr PM, requirements expert)"
+echo "  3. Architect           → e.g. @ForgeArchitectBot      (15+ yr architect, system design)"
+echo "  4. Developer           → e.g. @ForgeDevBot            (15+ yr engineer, production code)"
+echo "  5. Tester              → e.g. @ForgeQABot             (15+ yr QA, security & testing)"
 echo ""
-echo "Tip: You can add all 5 to a Telegram group later to watch them collaborate."
+echo -e "${YELLOW}Tip: Add all 5 to a Telegram group to watch them collaborate in real-time!${NC}"
 echo ""
 
 read -r -p "1. FORGE Orchestrator bot token: " TOKEN_FORGE
@@ -79,6 +81,31 @@ for TOKEN_VAR in TOKEN_FORGE TOKEN_PM TOKEN_ARCH TOKEN_DEV TOKEN_TEST; do
     fi
 done
 echo -e "${GREEN}✓ All 5 bot tokens collected${NC}"
+
+# ── Group Chat Setup ────────────────────────────────────────
+echo ""
+echo -e "${BOLD}💬 Telegram Group Chat (for bot-to-bot collaboration)${NC}"
+echo "──────────────────────────────────────────"
+echo "Want your bots to visibly interact in a Telegram group?"
+echo ""
+echo -e "${YELLOW}To get your Group Chat ID:${NC}"
+echo "  1. Create a Telegram group"
+echo "  2. Add all 5 bots to the group"
+echo "  3. Give each bot admin rights"
+echo "  4. Send any message in the group"
+echo "  5. Visit: https://api.telegram.org/bot<FORGE_TOKEN>/getUpdates"
+echo "  6. Look for 'chat':{'id': -XXXXXXXXX} — that negative number is your Group Chat ID"
+echo ""
+read -r -p "Group Chat ID (or press Enter to skip): " GROUP_CHAT_ID
+
+if [ -n "$GROUP_CHAT_ID" ]; then
+    GROUP_CHAT_ENABLED="true"
+    echo -e "${GREEN}✓ Group chat enabled (ID: $GROUP_CHAT_ID)${NC}"
+else
+    GROUP_CHAT_ENABLED="false"
+    GROUP_CHAT_ID="0"
+    echo -e "${YELLOW}⚠ Group chat skipped — you can set it up later in openclaw.json${NC}"
+fi
 
 # Detect GLM endpoint
 echo ""
@@ -105,10 +132,10 @@ mkdir -p "$WORKSPACE_DIR"/{agents,projects}
 # Install skills
 mkdir -p "$WORKSPACE_DIR/skills"
 cp -r "$SCRIPT_DIR/skills/"* "$WORKSPACE_DIR/skills/"
-echo -e "${GREEN}✓ Skills installed${NC}"
+echo -e "${GREEN}✓ Skills installed (orchestrator, developer, architect, tester, PM)${NC}"
 
 # Install agent system prompts (SOUL + role merged)
-echo -e "${YELLOW}▶ Installing agent prompts...${NC}"
+echo -e "${YELLOW}▶ Installing world-class agent prompts...${NC}"
 
 merge_agent() {
     local soul_file="$1"
@@ -125,7 +152,7 @@ merge_agent "$SCRIPT_DIR/agents/pm-soul.md"        "$SCRIPT_DIR/agents/pm.md"   
 merge_agent "$SCRIPT_DIR/agents/architect-soul.md" "$SCRIPT_DIR/agents/architect.md" "$WORKSPACE_DIR/agents/architect.md"
 merge_agent "$SCRIPT_DIR/agents/developer-soul.md" "$SCRIPT_DIR/agents/developer.md" "$WORKSPACE_DIR/agents/developer.md"
 merge_agent "$SCRIPT_DIR/agents/tester-soul.md"    "$SCRIPT_DIR/agents/tester.md"    "$WORKSPACE_DIR/agents/tester.md"
-echo -e "${GREEN}✓ Agent prompts installed (with personalities)${NC}"
+echo -e "${GREEN}✓ Agent prompts installed (world-class expertise + personalities)${NC}"
 
 # Install SOUL.md and AGENTS.md
 cp "$SCRIPT_DIR/SOUL.md"   "$WORKSPACE_DIR/SOUL.md"
@@ -218,6 +245,10 @@ cat > /tmp/forge-patch.json << JSONEOF
         "architect": { "token": "${TOKEN_ARCH}" },
         "developer": { "token": "${TOKEN_DEV}" },
         "tester":    { "token": "${TOKEN_TEST}" }
+      },
+      "groupChat": {
+        "enabled": ${GROUP_CHAT_ENABLED},
+        "chatId": "${GROUP_CHAT_ID}"
       }
     }
   },
@@ -264,16 +295,16 @@ chmod 700 "$WORKSPACE_DIR"
 
 # ── Print summary ────────────────────────────────────────────
 echo ""
-echo -e "${GREEN}${BOLD}╔══════════════════════════════════════════════╗${NC}"
-echo -e "${GREEN}${BOLD}║   ✅ FORGE Virtual Team — Setup Complete!    ║${NC}"
-echo -e "${GREEN}${BOLD}╚══════════════════════════════════════════════╝${NC}"
+echo -e "${GREEN}${BOLD}╔════════════════════════════════════════════════════╗${NC}"
+echo -e "${GREEN}${BOLD}║   ✅ FORGE Virtual Team v2 — Setup Complete!      ║${NC}"
+echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${BOLD}Your 5-bot team:${NC}"
-echo "  🤖 FORGE (Orchestrator) — your main contact"
-echo "  📋 Project Manager      — requirements & docs"
-echo "  🏗️  Architect            — system design"
-echo "  💻 Developer             — writes code"
-echo "  🧪 Tester                — finds bugs"
+echo -e "${BOLD}Your 5-bot team of WORLD-CLASS experts:${NC}"
+echo "  🤖 FORGE (Orchestrator)   — your CTO contact"
+echo "  📋 Project Manager (12yr) — requirements & specs expert"
+echo "  🏗️  Architect (15yr)       — system design master"
+echo "  💻 Developer (15yr)        — security-first production coder"
+echo "  🧪 Tester (15yr)           — OWASP security + 5-gate QA"
 echo ""
 echo -e "${BOLD}Next Steps:${NC}"
 echo "  1. Start OpenClaw:  openclaw gateway"
@@ -281,12 +312,29 @@ echo ""
 echo "  2. Message your FORGE bot on Telegram"
 echo "     Type /new to start your first project"
 echo ""
-echo -e "${BOLD}🔥 Group Chat Setup (optional but awesome):${NC}"
-echo "  1. Create a new Telegram group"
-echo "  2. Add all 5 bots to the group"
-echo "  3. Give each bot admin rights (so they can tag each other)"
-echo "  4. Watch Project Manager, Architect, Developer & Tester collaborate in real time"
-echo "  5. You stay in the group too — approve stages, give feedback"
+if [ "$GROUP_CHAT_ENABLED" = "true" ]; then
+    echo -e "${BOLD}💬 Group Chat: ENABLED${NC}"
+    echo "  Your bots will collaborate visibly in the group chat!"
+    echo "  Make sure all 5 bots have admin rights in the group."
+    echo ""
+else
+    echo -e "${BOLD}💬 Group Chat Setup (do this for the full experience!):${NC}"
+    echo "  1. Create a new Telegram group"
+    echo "  2. Add all 5 bots to the group"
+    echo "  3. Give each bot admin rights (so they can post)"
+    echo "  4. Get the Group Chat ID:"
+    echo "     → Send a message in the group"
+    echo "     → Visit: https://api.telegram.org/bot<TOKEN>/getUpdates"
+    echo "     → Copy the 'chat.id' value (negative number)"
+    echo "  5. Add it to ~/.openclaw/openclaw.json under channels.telegram.groupChat.chatId"
+    echo "  6. Set channels.telegram.groupChat.enabled to true"
+    echo ""
+fi
+echo -e "${BOLD}🔥 What makes this team special:${NC}"
+echo "  • Developer writes security-first code (OWASP-aware, handles all edge cases)"
+echo "  • Tester runs 5-gate quality checks (security audit, functional, performance)"
+echo "  • Architect designs for failure (every component has a failure recovery plan)"
+echo "  • PM writes Given/When/Then acceptance criteria (crystal-clear, testable specs)"
 echo ""
 if [ -n "$BACKUP_FILE" ]; then
     echo -e "${YELLOW}Note: Your previous config was backed up to:${NC}"
