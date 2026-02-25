@@ -1,0 +1,130 @@
+{
+  "models": {
+    "mode": "merge",
+    "providers": {
+      "zhipu": {
+        "baseUrl": "https://open.bigmodel.cn/api/paas/v4",
+        "apiKey": "YOUR_GLM_API_KEY_HERE",
+        "api": "openai-completions",
+        "models": [
+          {
+            "id": "zhipu/glm-4",
+            "name": "GLM-4",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0.001, "output": 0.001 },
+            "contextWindow": 128000,
+            "maxTokens": 4096
+          },
+          {
+            "id": "zhipu/glm-4-air",
+            "name": "GLM-4-Air",
+            "reasoning": false,
+            "input": ["text"],
+            "cost": { "input": 0.0001, "output": 0.0001 },
+            "contextWindow": 128000,
+            "maxTokens": 4096
+          }
+        ]
+      }
+    }
+  },
+
+  "agents": {
+    "defaults": {
+      "model": {
+        "primary": "zhipu/glm-4",
+        "fallbacks": ["zhipu/glm-4-air"]
+      },
+      "workspace": "REPLACE_WITH_FULL_PATH/workspace",
+      "maxConcurrent": 4,
+      "subagents": {
+        "maxConcurrent": 8
+      },
+      "compaction": {
+        "mode": "safeguard"
+      }
+    },
+
+    "named": {
+      "pm-agent": {
+        "model": {
+          "primary": "zhipu/glm-4",
+          "fallbacks": ["zhipu/glm-4-air"]
+        },
+        "systemPromptFile": "REPLACE_WITH_FULL_PATH/workspace/agents/pm.md",
+        "channel": "pm"
+      },
+      "architect-agent": {
+        "model": {
+          "primary": "zhipu/glm-4",
+          "fallbacks": ["zhipu/glm-4-air"]
+        },
+        "systemPromptFile": "REPLACE_WITH_FULL_PATH/workspace/agents/architect.md",
+        "channel": "architect"
+      },
+      "developer-agent": {
+        "model": {
+          "primary": "zhipu/glm-4",
+          "fallbacks": ["zhipu/glm-4-air"]
+        },
+        "systemPromptFile": "REPLACE_WITH_FULL_PATH/workspace/agents/developer.md",
+        "channel": "developer"
+      },
+      "tester-agent": {
+        "model": {
+          "primary": "zhipu/glm-4",
+          "fallbacks": ["zhipu/glm-4-air"]
+        },
+        "systemPromptFile": "REPLACE_WITH_FULL_PATH/workspace/agents/tester.md",
+        "channel": "tester"
+      }
+    }
+  },
+
+  "channels": {
+    "telegram": {
+      "accounts": {
+        "forge": {
+          "token": "YOUR_FORGE_ORCHESTRATOR_BOT_TOKEN"
+        },
+        "pm": {
+          "token": "YOUR_PM_BOT_TOKEN"
+        },
+        "architect": {
+          "token": "YOUR_ARCHITECT_BOT_TOKEN"
+        },
+        "developer": {
+          "token": "YOUR_DEVELOPER_BOT_TOKEN"
+        },
+        "tester": {
+          "token": "YOUR_TESTER_BOT_TOKEN"
+        }
+      }
+    }
+  },
+
+  "messages": {
+    "ackReactionScope": "all"
+  },
+
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
+
+  "hooks": {
+    "internal": {
+      "enabled": true,
+      "entries": {
+        "session-memory": { "enabled": true }
+      }
+    }
+  },
+
+  "gateway": {
+    "port": 18789,
+    "mode": "local",
+    "bind": "loopback"
+  }
+}
