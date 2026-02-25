@@ -56,19 +56,19 @@ echo "You need 5 bots. Create them all at @BotFather with /newbot"
 echo "Suggested names and usernames:"
 echo ""
 echo "  1. FORGE Orchestrator  → e.g. @ForgeOrchestratorBot  (talks to YOU)"
-echo "  2. Alex (PM)           → e.g. @AlexPMBot             (requirements & docs)"
-echo "  3. Sam (Architect)     → e.g. @SamArchitectBot       (system design)"
-echo "  4. Jordan (Developer)  → e.g. @JordanDevBot          (writes code)"
-echo "  5. Riley (Tester)      → e.g. @RileyQABot            (tests & bugs)"
+echo "  2. Project Manager     → e.g. @ForgePMBot             (requirements & docs)"
+echo "  3. Architect           → e.g. @ForgeArchitectBot      (system design)"
+echo "  4. Developer           → e.g. @ForgeDevBot            (writes code)"
+echo "  5. Tester              → e.g. @ForgeQABot             (tests & bugs)"
 echo ""
 echo "Tip: You can add all 5 to a Telegram group later to watch them collaborate."
 echo ""
 
 read -r -p "1. FORGE Orchestrator bot token: " TOKEN_FORGE
-read -r -p "2. Alex (PM Agent) bot token:    " TOKEN_PM
-read -r -p "3. Sam (Architect) bot token:    " TOKEN_ARCH
-read -r -p "4. Jordan (Developer) bot token: " TOKEN_DEV
-read -r -p "5. Riley (Tester) bot token:     " TOKEN_TEST
+read -r -p "2. Project Manager bot token:    " TOKEN_PM
+read -r -p "3. Architect bot token:          " TOKEN_ARCH
+read -r -p "4. Developer bot token:          " TOKEN_DEV
+read -r -p "5. Tester bot token:             " TOKEN_TEST
 
 # Validate all 5 tokens provided
 for TOKEN_VAR in TOKEN_FORGE TOKEN_PM TOKEN_ARCH TOKEN_DEV TOKEN_TEST; do
@@ -270,10 +270,10 @@ echo -e "${GREEN}${BOLD}╚═════════════════�
 echo ""
 echo -e "${BOLD}Your 5-bot team:${NC}"
 echo "  🤖 FORGE (Orchestrator) — your main contact"
-echo "  📋 Alex  (PM Agent)     — requirements & docs"
-echo "  🏗️  Sam   (Architect)    — system design"
-echo "  💻 Jordan (Developer)   — writes code"
-echo "  🧪 Riley  (Tester)      — finds bugs"
+echo "  📋 Project Manager      — requirements & docs"
+echo "  🏗️  Architect            — system design"
+echo "  💻 Developer             — writes code"
+echo "  🧪 Tester                — finds bugs"
 echo ""
 echo -e "${BOLD}Next Steps:${NC}"
 echo "  1. Start OpenClaw:  openclaw gateway"
@@ -285,7 +285,7 @@ echo -e "${BOLD}🔥 Group Chat Setup (optional but awesome):${NC}"
 echo "  1. Create a new Telegram group"
 echo "  2. Add all 5 bots to the group"
 echo "  3. Give each bot admin rights (so they can tag each other)"
-echo "  4. Watch Alex, Sam, Jordan & Riley collaborate in real time"
+echo "  4. Watch Project Manager, Architect, Developer & Tester collaborate in real time"
 echo "  5. You stay in the group too — approve stages, give feedback"
 echo ""
 if [ -n "$BACKUP_FILE" ]; then
