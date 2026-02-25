@@ -3,6 +3,8 @@
 #  FORGE Virtual Team — OpenClaw Setup Script
 #  Run this ONCE to install the 4-agent software team
 #  with Telegram group chat collaboration
+#
+#  Correct OpenClaw config schema as of v2026.2.x
 # ============================================================
 
 set -e
@@ -93,19 +95,10 @@ echo "  1. Create a Telegram group"
 echo "  2. Add all 5 bots to the group"
 echo "  3. Give each bot admin rights"
 echo "  4. Send any message in the group"
-echo "  5. Visit: https://api.telegram.org/bot<FORGE_TOKEN>/getUpdates"
+echo "  5. Run: curl \"https://api.telegram.org/bot<FORGE_TOKEN>/getUpdates\" | python3 -m json.tool"
 echo "  6. Look for 'chat':{'id': -XXXXXXXXX} — that negative number is your Group Chat ID"
 echo ""
 read -r -p "Group Chat ID (or press Enter to skip): " GROUP_CHAT_ID
-
-if [ -n "$GROUP_CHAT_ID" ]; then
-    GROUP_CHAT_ENABLED="true"
-    echo -e "${GREEN}✓ Group chat enabled (ID: $GROUP_CHAT_ID)${NC}"
-else
-    GROUP_CHAT_ENABLED="false"
-    GROUP_CHAT_ID="0"
-    echo -e "${YELLOW}⚠ Group chat skipped — you can set it up later in openclaw.json${NC}"
-fi
 
 # Detect GLM endpoint
 echo ""
@@ -159,6 +152,22 @@ cp "$SCRIPT_DIR/SOUL.md"   "$WORKSPACE_DIR/SOUL.md"
 cp "$SCRIPT_DIR/AGENTS.md" "$WORKSPACE_DIR/AGENTS.md"
 echo -e "${GREEN}✓ Orchestrator identity installed${NC}"
 
+# ── Build group chat config snippet ──────────────────────────
+# Only add group config if user provided a Group Chat ID
+GROUP_CONFIG=""
+if [ -n "$GROUP_CHAT_ID" ]; then
+    GROUP_CONFIG=$(cat <<GROUPJSON
+      "groupPolicy": "open",
+      "groups": {
+        "${GROUP_CHAT_ID}": {
+          "groupPolicy": "open",
+          "requireMention": false
+        }
+      },
+GROUPJSON
+)
+fi
+
 # ── Write openclaw.json ──────────────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Writing OpenClaw configuration...${NC}"
@@ -170,8 +179,16 @@ if [ -f "$OPENCLAW_DIR/openclaw.json" ]; then
     echo -e "${YELLOW}  ⚠ Existing config backed up to: $BACKUP_FILE${NC}"
 fi
 
-# Read existing config if present and merge, otherwise use template
-cat > /tmp/forge-patch.json << JSONEOF
+# Write config using correct OpenClaw schema (v2026.2.x)
+# Key schema rules:
+#   - agents.list[] (array, not agents.named)
+#   - channels.telegram.botToken (not accounts.*.token)
+#   - channels.telegram.accounts.<name>.botToken (for multi-account)
+#   - channels.telegram.groups."<id>" (for group chat config)
+#   - bindings[] (for routing accounts to agents)
+#   - No systemPromptFiles (OpenClaw reads from workspace automatically)
+
+cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
 {
   "models": {
     "mode": "merge",
@@ -210,50 +227,91 @@ cat > /tmp/forge-patch.json << JSONEOF
         "fallbacks": ["${GLM_PROVIDER_KEY}/glm-4-air"]
       },
       "workspace": "${WORKSPACE_DIR}",
+      "compaction": { "mode": "safeguard" },
       "maxConcurrent": 4,
-      "subagents": { "maxConcurrent": 8 },
-      "compaction": { "mode": "safeguard" }
+      "subagents": { "maxConcurrent": 8 }
     },
-    "named": {
-      "pm-agent": {
-        "model": { "primary": "${GLM_PROVIDER_KEY}/glm-4" },
-        "systemPromptFile": "${WORKSPACE_DIR}/agents/pm.md",
-        "channel": "pm"
+    "list": [
+      {
+        "id": "main",
+        "name": "FORGE Orchestrator",
+        "default": true,
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "FORGE", "emoji": "🦞" },
+        "subagents": { "allowAgents": ["*"] }
       },
-      "architect-agent": {
-        "model": { "primary": "${GLM_PROVIDER_KEY}/glm-4" },
-        "systemPromptFile": "${WORKSPACE_DIR}/agents/architect.md",
-        "channel": "architect"
+      {
+        "id": "pm-agent",
+        "name": "Project Manager",
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "PM", "emoji": "📋" }
       },
-      "developer-agent": {
-        "model": { "primary": "${GLM_PROVIDER_KEY}/glm-4" },
-        "systemPromptFile": "${WORKSPACE_DIR}/agents/developer.md",
-        "channel": "developer"
+      {
+        "id": "architect-agent",
+        "name": "Architect",
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "Architect", "emoji": "🏗️" }
       },
-      "tester-agent": {
-        "model": { "primary": "${GLM_PROVIDER_KEY}/glm-4" },
-        "systemPromptFile": "${WORKSPACE_DIR}/agents/tester.md",
-        "channel": "tester"
+      {
+        "id": "developer-agent",
+        "name": "Developer",
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "Developer", "emoji": "💻" }
+      },
+      {
+        "id": "tester-agent",
+        "name": "Tester",
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "Tester", "emoji": "🧪" }
       }
-    }
+    ]
   },
   "channels": {
     "telegram": {
+      "enabled": true,
+      "botToken": "${TOKEN_FORGE}",
+      "dmPolicy": "pairing",
+${GROUP_CONFIG}
       "accounts": {
-        "forge":     { "token": "${TOKEN_FORGE}" },
-        "pm":        { "token": "${TOKEN_PM}" },
-        "architect": { "token": "${TOKEN_ARCH}" },
-        "developer": { "token": "${TOKEN_DEV}" },
-        "tester":    { "token": "${TOKEN_TEST}" }
+        "pm": {
+          "botToken": "${TOKEN_PM}"
+        },
+        "architect": {
+          "botToken": "${TOKEN_ARCH}"
+        },
+        "developer": {
+          "botToken": "${TOKEN_DEV}"
+        },
+        "tester": {
+          "botToken": "${TOKEN_TEST}"
+        }
       },
-      "groupChat": {
-        "enabled": ${GROUP_CHAT_ENABLED},
-        "chatId": "${GROUP_CHAT_ID}"
-      }
+      "streaming": "off"
     }
   },
+  "bindings": [
+    {
+      "match": { "channel": "telegram", "accountId": "pm" },
+      "agentId": "pm-agent"
+    },
+    {
+      "match": { "channel": "telegram", "accountId": "architect" },
+      "agentId": "architect-agent"
+    },
+    {
+      "match": { "channel": "telegram", "accountId": "developer" },
+      "agentId": "developer-agent"
+    },
+    {
+      "match": { "channel": "telegram", "accountId": "tester" },
+      "agentId": "tester-agent"
+    }
+  ],
   "messages": { "ackReactionScope": "all" },
-  "commands": { "native": "auto", "nativeSkills": "auto" },
+  "commands": {
+    "native": "auto",
+    "nativeSkills": "auto"
+  },
   "hooks": {
     "internal": {
       "enabled": true,
@@ -268,25 +326,7 @@ cat > /tmp/forge-patch.json << JSONEOF
 }
 JSONEOF
 
-# Use openclaw config apply if available, otherwise write directly
-if openclaw config apply /tmp/forge-patch.json 2>/dev/null; then
-    echo -e "${GREEN}✓ Config applied via openclaw config${NC}"
-else
-    # Fall back to direct write if config apply not available
-    cp /tmp/forge-patch.json "$OPENCLAW_DIR/openclaw.json"
-    echo -e "${GREEN}✓ Config written directly${NC}"
-fi
-
-rm -f /tmp/forge-patch.json
-
-# ── Validate config ──────────────────────────────────────────
-echo ""
-echo -e "${YELLOW}▶ Validating configuration...${NC}"
-if openclaw doctor 2>&1 | grep -q "error\|Error\|FAIL"; then
-    echo -e "${YELLOW}  ⚠ Doctor found issues — run 'openclaw doctor --fix' to repair${NC}"
-else
-    echo -e "${GREEN}✓ Configuration valid${NC}"
-fi
+echo -e "${GREEN}✓ Config written to $OPENCLAW_DIR/openclaw.json${NC}"
 
 # ── Set file permissions ─────────────────────────────────────
 chmod 700 "$OPENCLAW_DIR"
@@ -300,7 +340,7 @@ echo -e "${GREEN}${BOLD}║   ✅ FORGE Virtual Team v2 — Setup Complete!     
 echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
 echo ""
 echo -e "${BOLD}Your 5-bot team of WORLD-CLASS experts:${NC}"
-echo "  🤖 FORGE (Orchestrator)   — your CTO contact"
+echo "  🦞 FORGE (Orchestrator)   — your CTO contact"
 echo "  📋 Project Manager (12yr) — requirements & specs expert"
 echo "  🏗️  Architect (15yr)       — system design master"
 echo "  💻 Developer (15yr)        — security-first production coder"
@@ -312,8 +352,8 @@ echo ""
 echo "  2. Message your FORGE bot on Telegram"
 echo "     Type /new to start your first project"
 echo ""
-if [ "$GROUP_CHAT_ENABLED" = "true" ]; then
-    echo -e "${BOLD}💬 Group Chat: ENABLED${NC}"
+if [ -n "$GROUP_CHAT_ID" ]; then
+    echo -e "${BOLD}💬 Group Chat: ENABLED${NC} (ID: $GROUP_CHAT_ID)"
     echo "  Your bots will collaborate visibly in the group chat!"
     echo "  Make sure all 5 bots have admin rights in the group."
     echo ""
@@ -324,10 +364,9 @@ else
     echo "  3. Give each bot admin rights (so they can post)"
     echo "  4. Get the Group Chat ID:"
     echo "     → Send a message in the group"
-    echo "     → Visit: https://api.telegram.org/bot<TOKEN>/getUpdates"
+    echo "     → Run: curl \"https://api.telegram.org/bot<TOKEN>/getUpdates\" | python3 -m json.tool"
     echo "     → Copy the 'chat.id' value (negative number)"
-    echo "  5. Add it to ~/.openclaw/openclaw.json under channels.telegram.groupChat.chatId"
-    echo "  6. Set channels.telegram.groupChat.enabled to true"
+    echo "  5. Add to config: openclaw config set channels.telegram.groups.<ID>.groupPolicy open"
     echo ""
 fi
 echo -e "${BOLD}🔥 What makes this team special:${NC}"
