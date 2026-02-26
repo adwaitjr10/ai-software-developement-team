@@ -365,7 +365,7 @@ ${GROUP_CONFIG}
       "agentId": "tester-agent"
     }
   ],
-  "messages": { "ackReactionScope": "all" },
+  "messages": { "ackReactionScope": "direct" },
   "commands": {
     "native": "auto",
     "nativeSkills": "auto"
