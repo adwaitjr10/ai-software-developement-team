@@ -215,7 +215,7 @@ After setup, your installed workspace lives at:
 
 | Platform | Available Models | Recommended |
 |---|---|---|
-| **Z.AI** | `glm-5`, `glm-4.7`, `glm-4.6`, `glm-4.5`, `glm-4.5-air` | Primary: `glm-5`, Fallback: `glm-4.5-air` |
+| **Z.AI** | `glm-5`, `glm-4.7`, `glm-4.6`, `glm-5`, `glm-4.5-air` | Primary: `glm-5`, Fallback: `glm-4.5-air` |
 | **Zhipu AI** | `glm-4`, `glm-4-air`, `glm-4-flash` | Primary: `glm-4`, Fallback: `glm-4-air` |
 
 To change your model after setup:

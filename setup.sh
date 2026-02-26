@@ -4,6 +4,7 @@
 #  Run this ONCE to install the 4-agent software team
 #  with Telegram group chat collaboration
 #
+#  Supports: Claude (Anthropic), GLM (Z.AI / Zhipu), or both
 #  Correct OpenClaw config schema as of v2026.2.x
 # ============================================================
 
@@ -32,27 +33,73 @@ echo ""
 echo -e "${YELLOW}▶ Checking OpenClaw installation...${NC}"
 if ! command -v openclaw &>/dev/null; then
     echo -e "${RED}✗ OpenClaw not found. Install it first:${NC}"
+    echo "  nvm use 22"
     echo "  npm install -g openclaw@latest"
     echo "  openclaw onboard"
     exit 1
 fi
 echo -e "${GREEN}✓ OpenClaw found: $(openclaw --version 2>/dev/null || echo 'installed')${NC}"
 
-# ── Collect credentials ─────────────────────────────────────
+# ── AI Model Selection ──────────────────────────────────────
 echo ""
-echo -e "${BOLD}📋 Configuration Setup${NC}"
+echo -e "${BOLD}🧠 AI Model Configuration${NC}"
 echo "──────────────────────────────────────────"
-
-# GLM API Key
 echo ""
-echo -e "${YELLOW}Your GLM API key (from open.bigmodel.cn or z.ai):${NC}"
-read -r -p "GLM API Key: " GLM_API_KEY
-if [ -z "$GLM_API_KEY" ]; then
-    echo -e "${RED}✗ GLM API key is required${NC}"
-    exit 1
+echo -e "${YELLOW}Which AI model(s) do you want to use?${NC}"
+echo "  1) Claude (Anthropic)           — Best quality, paid API"
+echo "  2) GLM (Z.AI / Zhipu AI)        — Free tier available"
+echo "  3) Both (Claude primary + GLM fallback) — Recommended"
+echo ""
+read -r -p "Choice [1/2/3]: " MODEL_CHOICE
+
+ANTHROPIC_KEY=""
+GLM_API_KEY=""
+GLM_BASE_URL=""
+GLM_PROVIDER_KEY=""
+
+# Collect Anthropic key if selected
+if [ "$MODEL_CHOICE" = "1" ] || [ "$MODEL_CHOICE" = "3" ]; then
+    echo ""
+    echo -e "${YELLOW}Anthropic API key (from console.anthropic.com):${NC}"
+    read -r -p "Anthropic Key: " ANTHROPIC_KEY
+    if [ -z "$ANTHROPIC_KEY" ]; then
+        echo -e "${RED}✗ Anthropic API key is required${NC}"
+        exit 1
+    fi
+    echo -e "${GREEN}✓ Anthropic key saved${NC}"
 fi
 
-# Telegram Bot Tokens — 5 bots, one per persona
+# Collect GLM key if selected
+if [ "$MODEL_CHOICE" = "2" ] || [ "$MODEL_CHOICE" = "3" ]; then
+    echo ""
+    echo -e "${YELLOW}GLM API key (from open.bigmodel.cn or z.ai):${NC}"
+    read -r -p "GLM API Key: " GLM_API_KEY
+    if [ -z "$GLM_API_KEY" ]; then
+        echo -e "${RED}✗ GLM API key is required${NC}"
+        exit 1
+    fi
+
+    echo ""
+    echo -e "${YELLOW}Which GLM platform?${NC}"
+    echo "  1) Zhipu AI (open.bigmodel.cn) — has glm-4"
+    echo "  2) Z.AI (api.z.ai) — has glm-5, glm-4.5-air"
+    read -r -p "Choice [1/2]: " GLM_PLATFORM
+    if [ "$GLM_PLATFORM" = "2" ]; then
+        GLM_BASE_URL="https://api.z.ai/api/paas/v4"
+        GLM_PROVIDER_KEY="zai"
+        GLM_PRIMARY="glm-5"
+        GLM_FALLBACK="glm-4.5-air"
+        echo -e "${GREEN}→ Using Z.AI (glm-5 + glm-4.5-air)${NC}"
+    else
+        GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
+        GLM_PROVIDER_KEY="zhipu"
+        GLM_PRIMARY="glm-4"
+        GLM_FALLBACK="glm-4-air"
+        echo -e "${GREEN}→ Using Zhipu AI (glm-4 + glm-4-air)${NC}"
+    fi
+fi
+
+# ── Telegram Bot Tokens ─────────────────────────────────────
 echo ""
 echo -e "${BOLD}🤖 Telegram Bot Tokens${NC}"
 echo "──────────────────────────────────────────"
@@ -74,7 +121,7 @@ read -r -p "3. Architect bot token:          " TOKEN_ARCH
 read -r -p "4. Developer bot token:          " TOKEN_DEV
 read -r -p "5. Tester bot token:             " TOKEN_TEST
 
-# Validate all 5 tokens provided
+# Validate all 5 tokens
 for TOKEN_VAR in TOKEN_FORGE TOKEN_PM TOKEN_ARCH TOKEN_DEV TOKEN_TEST; do
     if [ -z "${!TOKEN_VAR}" ]; then
         echo -e "${RED}✗ All 5 bot tokens are required.${NC}"
@@ -99,22 +146,6 @@ echo "  5. Run: curl \"https://api.telegram.org/bot<FORGE_TOKEN>/getUpdates\" | 
 echo "  6. Look for 'chat':{'id': -XXXXXXXXX} — that negative number is your Group Chat ID"
 echo ""
 read -r -p "Group Chat ID (or press Enter to skip): " GROUP_CHAT_ID
-
-# Detect GLM endpoint
-echo ""
-echo -e "${YELLOW}Which GLM platform are you using?${NC}"
-echo "  1) Zhipu AI (open.bigmodel.cn) — Chinese platform"
-echo "  2) Z.AI (api.z.ai) — International platform"
-read -r -p "Choice [1/2]: " GLM_PLATFORM
-if [ "$GLM_PLATFORM" = "2" ]; then
-    GLM_BASE_URL="https://api.z.ai/api/paas/v4"
-    GLM_PROVIDER_KEY="zai"
-    echo -e "${GREEN}→ Using Z.AI endpoint${NC}"
-else
-    GLM_BASE_URL="https://open.bigmodel.cn/api/paas/v4"
-    GLM_PROVIDER_KEY="zhipu"
-    echo -e "${GREEN}→ Using Zhipu AI endpoint${NC}"
-fi
 
 # ── Create directory structure ───────────────────────────────
 echo ""
@@ -152,8 +183,9 @@ cp "$SCRIPT_DIR/SOUL.md"   "$WORKSPACE_DIR/SOUL.md"
 cp "$SCRIPT_DIR/AGENTS.md" "$WORKSPACE_DIR/AGENTS.md"
 echo -e "${GREEN}✓ Orchestrator identity installed${NC}"
 
-# ── Build group chat config snippet ──────────────────────────
-# Only add group config if user provided a Group Chat ID
+# ── Build config snippets ────────────────────────────────────
+
+# Group config
 GROUP_CONFIG=""
 if [ -n "$GROUP_CHAT_ID" ]; then
     GROUP_CONFIG=$(cat <<GROUPJSON
@@ -168,6 +200,69 @@ GROUPJSON
 )
 fi
 
+# Build providers JSON
+build_providers() {
+    local providers=""
+
+    # Anthropic provider
+    if [ -n "$ANTHROPIC_KEY" ]; then
+        providers="${providers}
+      \"anthropic\": {
+        \"apiKey\": \"${ANTHROPIC_KEY}\"
+      }"
+    fi
+
+    # GLM provider
+    if [ -n "$GLM_API_KEY" ]; then
+        [ -n "$providers" ] && providers="${providers},"
+        providers="${providers}
+      \"${GLM_PROVIDER_KEY}\": {
+        \"baseUrl\": \"${GLM_BASE_URL}\",
+        \"apiKey\": \"${GLM_API_KEY}\",
+        \"api\": \"openai-completions\",
+        \"models\": [
+          {
+            \"id\": \"${GLM_PROVIDER_KEY}/${GLM_PRIMARY}\",
+            \"name\": \"${GLM_PRIMARY}\",
+            \"reasoning\": false,
+            \"input\": [\"text\"],
+            \"cost\": { \"input\": 0.001, \"output\": 0.001 },
+            \"contextWindow\": 128000,
+            \"maxTokens\": 4096
+          },
+          {
+            \"id\": \"${GLM_PROVIDER_KEY}/${GLM_FALLBACK}\",
+            \"name\": \"${GLM_FALLBACK}\",
+            \"reasoning\": false,
+            \"input\": [\"text\"],
+            \"cost\": { \"input\": 0.0001, \"output\": 0.0001 },
+            \"contextWindow\": 128000,
+            \"maxTokens\": 4096
+          }
+        ]
+      }"
+    fi
+
+    echo "$providers"
+}
+
+# Build model selection
+build_model_config() {
+    if [ "$MODEL_CHOICE" = "1" ]; then
+        # Claude only
+        echo "\"primary\": \"anthropic/claude-sonnet-4-20250514\", \"fallbacks\": [\"anthropic/claude-haiku-3-5-20241022\"]"
+    elif [ "$MODEL_CHOICE" = "2" ]; then
+        # GLM only
+        echo "\"primary\": \"${GLM_PROVIDER_KEY}/${GLM_PRIMARY}\", \"fallbacks\": [\"${GLM_PROVIDER_KEY}/${GLM_FALLBACK}\"]"
+    else
+        # Both — Claude primary, GLM fallback
+        echo "\"primary\": \"anthropic/claude-sonnet-4-20250514\", \"fallbacks\": [\"${GLM_PROVIDER_KEY}/${GLM_PRIMARY}\", \"${GLM_PROVIDER_KEY}/${GLM_FALLBACK}\"]"
+    fi
+}
+
+PROVIDERS_JSON=$(build_providers)
+MODEL_JSON=$(build_model_config)
+
 # ── Write openclaw.json ──────────────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Writing OpenClaw configuration...${NC}"
@@ -179,53 +274,16 @@ if [ -f "$OPENCLAW_DIR/openclaw.json" ]; then
     echo -e "${YELLOW}  ⚠ Existing config backed up to: $BACKUP_FILE${NC}"
 fi
 
-# Write config using correct OpenClaw schema (v2026.2.x)
-# Key schema rules:
-#   - agents.list[] (array, not agents.named)
-#   - channels.telegram.botToken (not accounts.*.token)
-#   - channels.telegram.accounts.<name>.botToken (for multi-account)
-#   - channels.telegram.groups."<id>" (for group chat config)
-#   - bindings[] (for routing accounts to agents)
-#   - No systemPromptFiles (OpenClaw reads from workspace automatically)
-
 cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
 {
   "models": {
     "mode": "merge",
-    "providers": {
-      "${GLM_PROVIDER_KEY}": {
-        "baseUrl": "${GLM_BASE_URL}",
-        "apiKey": "${GLM_API_KEY}",
-        "api": "openai-completions",
-        "models": [
-          {
-            "id": "${GLM_PROVIDER_KEY}/glm-4",
-            "name": "GLM-4",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": { "input": 0.001, "output": 0.001 },
-            "contextWindow": 128000,
-            "maxTokens": 4096
-          },
-          {
-            "id": "${GLM_PROVIDER_KEY}/glm-4-air",
-            "name": "GLM-4-Air",
-            "reasoning": false,
-            "input": ["text"],
-            "cost": { "input": 0.0001, "output": 0.0001 },
-            "contextWindow": 128000,
-            "maxTokens": 4096
-          }
-        ]
-      }
+    "providers": {${PROVIDERS_JSON}
     }
   },
   "agents": {
     "defaults": {
-      "model": {
-        "primary": "${GLM_PROVIDER_KEY}/glm-4",
-        "fallbacks": ["${GLM_PROVIDER_KEY}/glm-4-air"]
-      },
+      "model": { ${MODEL_JSON} },
       "workspace": "${WORKSPACE_DIR}",
       "compaction": { "mode": "safeguard" },
       "maxConcurrent": 4,
@@ -346,39 +404,42 @@ echo "  🏗️  Architect (15yr)       — system design master"
 echo "  💻 Developer (15yr)        — security-first production coder"
 echo "  🧪 Tester (15yr)           — OWASP security + 5-gate QA"
 echo ""
+
+# Show model config
+echo -e "${BOLD}🧠 Model Configuration:${NC}"
+if [ "$MODEL_CHOICE" = "1" ]; then
+    echo "  Primary:  Claude Sonnet 4 (Anthropic)"
+    echo "  Fallback: Claude Haiku 3.5 (Anthropic)"
+elif [ "$MODEL_CHOICE" = "2" ]; then
+    echo "  Primary:  ${GLM_PRIMARY} (${GLM_PROVIDER_KEY})"
+    echo "  Fallback: ${GLM_FALLBACK} (${GLM_PROVIDER_KEY})"
+else
+    echo "  Primary:  Claude Sonnet 4 (Anthropic)"
+    echo "  Fallback: ${GLM_PRIMARY} → ${GLM_FALLBACK} (${GLM_PROVIDER_KEY})"
+fi
+echo ""
+
 echo -e "${BOLD}Next Steps:${NC}"
-echo "  1. Start OpenClaw:  openclaw gateway"
+echo "  1. Start: ./start.sh  (or: openclaw gateway)"
+echo "  2. Stop:  ./stop.sh   (or: openclaw gateway stop)"
+echo "  3. Message your FORGE bot on Telegram → type /new"
 echo ""
-echo "  2. Message your FORGE bot on Telegram"
-echo "     Type /new to start your first project"
-echo ""
+
 if [ -n "$GROUP_CHAT_ID" ]; then
     echo -e "${BOLD}💬 Group Chat: ENABLED${NC} (ID: $GROUP_CHAT_ID)"
     echo "  Your bots will collaborate visibly in the group chat!"
-    echo "  Make sure all 5 bots have admin rights in the group."
     echo ""
 else
-    echo -e "${BOLD}💬 Group Chat Setup (do this for the full experience!):${NC}"
-    echo "  1. Create a new Telegram group"
-    echo "  2. Add all 5 bots to the group"
-    echo "  3. Give each bot admin rights (so they can post)"
-    echo "  4. Get the Group Chat ID:"
-    echo "     → Send a message in the group"
-    echo "     → Run: curl \"https://api.telegram.org/bot<TOKEN>/getUpdates\" | python3 -m json.tool"
-    echo "     → Copy the 'chat.id' value (negative number)"
-    echo "  5. Add to config: openclaw config set channels.telegram.groups.<ID>.groupPolicy open"
+    echo -e "${BOLD}💬 Group Chat: SKIPPED${NC}"
+    echo "  To enable later, see README.md → Group Chat Setup"
     echo ""
 fi
-echo -e "${BOLD}🔥 What makes this team special:${NC}"
-echo "  • Developer writes security-first code (OWASP-aware, handles all edge cases)"
-echo "  • Tester runs 5-gate quality checks (security audit, functional, performance)"
-echo "  • Architect designs for failure (every component has a failure recovery plan)"
-echo "  • PM writes Given/When/Then acceptance criteria (crystal-clear, testable specs)"
-echo ""
+
 if [ -n "$BACKUP_FILE" ]; then
-    echo -e "${YELLOW}Note: Your previous config was backed up to:${NC}"
+    echo -e "${YELLOW}Note: Previous config backed up to:${NC}"
     echo "  $BACKUP_FILE"
     echo ""
 fi
+
 echo -e "${BLUE}Happy building! 🦞${NC}"
 echo ""
