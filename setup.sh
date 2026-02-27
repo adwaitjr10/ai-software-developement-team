@@ -210,20 +210,8 @@ echo -e "${GREEN}✓ Orchestrator identity installed${NC}"
 
 # ── Build config snippets ────────────────────────────────────
 
-# Group config
+# Group config — no longer needed at top level since FORGE is a named account
 GROUP_CONFIG=""
-if [ -n "$GROUP_CHAT_ID" ]; then
-    GROUP_CONFIG=$(cat <<GROUPJSON
-      "groupPolicy": "open",
-      "groups": {
-        "${GROUP_CHAT_ID}": {
-          "groupPolicy": "open",
-          "requireMention": false
-        }
-      },
-GROUPJSON
-)
-fi
 
 # Build providers JSON
 build_providers() {
@@ -387,43 +375,48 @@ cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
   "channels": {
     "telegram": {
       "enabled": true,
-      "botToken": "${TOKEN_FORGE}",
       "dmPolicy": "pairing",
-${GROUP_CONFIG}
+      "groupPolicy": "open",
+      "streaming": "off",
       "accounts": {
+        "forge": {
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_FORGE}",
+          "groupPolicy": "open",
+          "streaming": "off"
+        },
         "pm": {
           "dmPolicy": "pairing",
           "botToken": "${TOKEN_PM}",
-          "groupPolicy": "allowlist",
-$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "groupPolicy": "open",
           "streaming": "off"
         },
         "architect": {
           "dmPolicy": "pairing",
           "botToken": "${TOKEN_ARCH}",
-          "groupPolicy": "allowlist",
-$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "groupPolicy": "open",
           "streaming": "off"
         },
         "developer": {
           "dmPolicy": "pairing",
           "botToken": "${TOKEN_DEV}",
-          "groupPolicy": "allowlist",
-$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "groupPolicy": "open",
           "streaming": "off"
         },
         "tester": {
           "dmPolicy": "pairing",
           "botToken": "${TOKEN_TEST}",
-          "groupPolicy": "allowlist",
-$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "groupPolicy": "open",
           "streaming": "off"
         }
-      },
-      "streaming": "off"
+      }
     }
   },
   "bindings": [
+    {
+      "match": { "channel": "telegram", "accountId": "forge" },
+      "agentId": "main"
+    },
     {
       "match": { "channel": "telegram", "accountId": "pm" },
       "agentId": "pm-agent"
