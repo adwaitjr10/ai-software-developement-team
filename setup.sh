@@ -49,13 +49,15 @@ echo -e "${YELLOW}Which AI model(s) do you want to use?${NC}"
 echo "  1) Claude (Anthropic)           — Best quality, paid API"
 echo "  2) GLM (Z.AI / Zhipu AI)        — Free tier available"
 echo "  3) Both (Claude primary + GLM fallback) — Recommended"
+echo "  4) AWS Bedrock                  — Using temporary keys/presigned URL"
 echo ""
-read -r -p "Choice [1/2/3]: " MODEL_CHOICE
+read -r -p "Choice [1/2/3/4]: " MODEL_CHOICE
 
 ANTHROPIC_KEY=""
 GLM_API_KEY=""
 GLM_BASE_URL=""
 GLM_PROVIDER_KEY=""
+BEDROCK_KEY=""
 
 # Collect Anthropic key if selected
 if [ "$MODEL_CHOICE" = "1" ] || [ "$MODEL_CHOICE" = "3" ]; then
@@ -67,6 +69,29 @@ if [ "$MODEL_CHOICE" = "1" ] || [ "$MODEL_CHOICE" = "3" ]; then
         exit 1
     fi
     echo -e "${GREEN}✓ Anthropic key saved${NC}"
+fi
+
+# Collect Bedrock credentials if selected
+if [ "$MODEL_CHOICE" = "4" ]; then
+    echo ""
+    echo -e "${YELLOW}AWS Bedrock Credentials${NC}"
+    echo "You need AWS credentials with Bedrock access."
+    echo ""
+    read -r -p "AWS Access Key ID: " AWS_ACCESS_KEY_ID
+    if [ -z "$AWS_ACCESS_KEY_ID" ]; then
+        echo -e "${RED}✗ AWS Access Key ID is required${NC}"
+        exit 1
+    fi
+    read -rs -p "AWS Secret Access Key: " AWS_SECRET_ACCESS_KEY
+    echo ""
+    if [ -z "$AWS_SECRET_ACCESS_KEY" ]; then
+        echo -e "${RED}✗ AWS Secret Access Key is required${NC}"
+        exit 1
+    fi
+    read -r -p "AWS Region [default: ap-south-1]: " AWS_REGION
+    AWS_REGION=${AWS_REGION:-ap-south-1}
+    read -r -p "AWS Session Token (optional, press Enter to skip): " AWS_SESSION_TOKEN
+    echo -e "${GREEN}✓ AWS credentials saved${NC}"
 fi
 
 # Collect GLM key if selected
@@ -212,6 +237,37 @@ build_providers() {
       }"
     fi
 
+    # Bedrock provider
+    if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+        [ -n "$providers" ] && providers="${providers},"
+        providers="${providers}
+      \"amazon-bedrock\": {
+        \"baseUrl\": \"https://bedrock-runtime.${AWS_REGION}.amazonaws.com\",
+        \"auth\": \"aws-sdk\",
+        \"api\": \"bedrock-converse-stream\",
+        \"models\": [
+          {
+            \"id\": \"global.anthropic.claude-sonnet-4-5-20250929-v1:0\",
+            \"name\": \"Claude Sonnet 4.5\",
+            \"reasoning\": false,
+            \"input\": [\"text\", \"image\"],
+            \"cost\": { \"input\": 0.003, \"output\": 0.015 },
+            \"contextWindow\": 200000,
+            \"maxTokens\": 8192
+          },
+          {
+            \"id\": \"global.anthropic.claude-3-5-haiku-20240307-v1:0\",
+            \"name\": \"Claude 3.5 Haiku\",
+            \"reasoning\": false,
+            \"input\": [\"text\", \"image\"],
+            \"cost\": { \"input\": 0.0008, \"output\": 0.004 },
+            \"contextWindow\": 200000,
+            \"maxTokens\": 8192
+          }
+        ]
+      }"
+    fi
+
     # GLM provider
     if [ -n "$GLM_API_KEY" ]; then
         [ -n "$providers" ] && providers="${providers},"
@@ -254,6 +310,10 @@ build_model_config() {
     elif [ "$MODEL_CHOICE" = "2" ]; then
         # GLM only
         echo "\"primary\": \"${GLM_PROVIDER_KEY}/${GLM_PRIMARY}\", \"fallbacks\": [\"${GLM_PROVIDER_KEY}/${GLM_FALLBACK}\"]"
+    elif [ "$MODEL_CHOICE" = "4" ]; then
+        # Bedrock only
+        AWS_REGION=${AWS_REGION:-ap-south-1}
+        echo "\"primary\": \"amazon-bedrock/global.anthropic.claude-sonnet-4-5-20250929-v1:0\", \"fallbacks\": [\"amazon-bedrock/global.anthropic.claude-3-5-haiku-20240307-v1:0\"]"
     else
         # Both — Claude primary, GLM fallback
         echo "\"primary\": \"anthropic/claude-sonnet-4-20250514\", \"fallbacks\": [\"${GLM_PROVIDER_KEY}/${GLM_PRIMARY}\", \"${GLM_PROVIDER_KEY}/${GLM_FALLBACK}\"]"
@@ -332,16 +392,32 @@ cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
 ${GROUP_CONFIG}
       "accounts": {
         "pm": {
-          "botToken": "${TOKEN_PM}"
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_PM}",
+          "groupPolicy": "allowlist",
+$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "streaming": "off"
         },
         "architect": {
-          "botToken": "${TOKEN_ARCH}"
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_ARCH}",
+          "groupPolicy": "allowlist",
+$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "streaming": "off"
         },
         "developer": {
-          "botToken": "${TOKEN_DEV}"
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_DEV}",
+          "groupPolicy": "allowlist",
+$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "streaming": "off"
         },
         "tester": {
-          "botToken": "${TOKEN_TEST}"
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_TEST}",
+          "groupPolicy": "allowlist",
+$([ -n "$GROUP_CHAT_ID" ] && echo "          \"groups\": { \"${GROUP_CHAT_ID}\": { \"requireMention\": true } },")
+          "streaming": "off"
         }
       },
       "streaming": "off"
@@ -386,6 +462,22 @@ JSONEOF
 
 echo -e "${GREEN}✓ Config written to $OPENCLAW_DIR/openclaw.json${NC}"
 
+# ── Save AWS credentials for start.sh ─────────────────────────
+if [ -n "$AWS_ACCESS_KEY_ID" ]; then
+    CREDENTIALS_FILE="$HOME/.aws-bedrock-creds"
+    cat > "$CREDENTIALS_FILE" << CREDFILE
+# AWS Bedrock credentials for OpenClaw
+export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
+export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
+export AWS_REGION="${AWS_REGION}"
+CREDFILE
+    if [ -n "$AWS_SESSION_TOKEN" ]; then
+        echo "export AWS_SESSION_TOKEN=\"${AWS_SESSION_TOKEN}\"" >> "$CREDENTIALS_FILE"
+    fi
+    chmod 600 "$CREDENTIALS_FILE"
+    echo -e "${GREEN}✓ AWS credentials saved to $CREDENTIALS_FILE${NC}"
+fi
+
 # ── Set file permissions ─────────────────────────────────────
 chmod 700 "$OPENCLAW_DIR"
 chmod 600 "$OPENCLAW_DIR/openclaw.json"
@@ -413,6 +505,9 @@ if [ "$MODEL_CHOICE" = "1" ]; then
 elif [ "$MODEL_CHOICE" = "2" ]; then
     echo "  Primary:  ${GLM_PRIMARY} (${GLM_PROVIDER_KEY})"
     echo "  Fallback: ${GLM_FALLBACK} (${GLM_PROVIDER_KEY})"
+elif [ "$MODEL_CHOICE" = "4" ]; then
+    echo "  Primary:  Claude Sonnet 4.5 (AWS Bedrock ${AWS_REGION})"
+    echo "  Fallback: Claude 3.5 Haiku (AWS Bedrock ${AWS_REGION})"
 else
     echo "  Primary:  Claude Sonnet 4 (Anthropic)"
     echo "  Fallback: ${GLM_PRIMARY} → ${GLM_FALLBACK} (${GLM_PROVIDER_KEY})"
