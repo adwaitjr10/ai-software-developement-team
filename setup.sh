@@ -1,8 +1,8 @@
 #!/bin/bash
 # ============================================================
 #  FORGE Virtual Team — OpenClaw Setup Script
-#  Run this ONCE to install the 4-agent software team
-#  with Telegram group chat collaboration
+#  Run this ONCE to install the 5-agent software team
+#  with Telegram group chat collaboration + voice meetings
 #
 #  Supports: Claude (Anthropic), GLM (Z.AI / Zhipu), or both
 #  Correct OpenClaw config schema as of v2026.2.x
@@ -21,6 +21,101 @@ YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
 BOLD='\033[1m'
 NC='\033[0m'
+
+# ── Validation Helper Functions ─────────────────────────────
+
+# Validate Telegram bot token by calling getMe API
+validate_bot_token() {
+    local token="$1"
+    local bot_name="$2"
+
+    echo -n "  🔍 Validating $bot_name token..." >&2
+    local response
+    response=$(curl -s "https://api.telegram.org/bot${token}/getMe" 2>/dev/null || echo '{"ok":false}')
+
+    if echo "$response" | grep -q '"ok":true'; then
+        local bot_username=$(echo "$response" | grep -o '"username":"[^"]*"' | cut -d'"' -f4)
+        echo -e " ${GREEN}✓${NC} (@$bot_username)" >&2
+        return 0
+    else
+        local error_desc=$(echo "$response" | grep -o '"description":"[^"]*"' | cut -d'"' -f4 || echo "Invalid token")
+        echo -e " ${RED}✗${NC} ($error_desc)" >&2
+        return 1
+    fi
+}
+
+# Validate Anthropic API key
+validate_anthropic_key() {
+    local api_key="$1"
+
+    echo -n "  🔍 Validating Anthropic API key..." >&2
+    local response
+    response=$(curl -s "https://api.anthropic.com/v1/messages" \
+        -H "x-api-key: $api_key" \
+        -H "anthropic-version: 2023-06-01" \
+        -H "content-type: application/json" \
+        -d '{"model":"claude-3-haiku-20240307","max_tokens":1,"messages":[{"role":"user","content":"hi"}]}' \
+        2>/dev/null || echo "{}")
+
+    # Check for valid key (may get rate limit or error, but 401 means invalid)
+    if echo "$response" | grep -q '"type":"error"'; then
+        local error_type=$(echo "$response" | grep -o '"type":"[^"]*"' | cut -d'"' -f4)
+        if [ "$error_type" = "authentication_error" ]; then
+            echo -e " ${RED}✗${NC} (Invalid API key)" >&2
+            return 1
+        fi
+    fi
+    echo -e " ${GREEN}✓${NC}" >&2
+    return 0
+}
+
+# Validate GLM API key
+validate_glm_key() {
+    local api_key="$1"
+    local base_url="$2"
+
+    echo -n "  🔍 Validating GLM API key..." >&2
+    local response
+    response=$(curl -s "${base_url}/chat/completions" \
+        -H "Authorization: Bearer ${api_key}" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"placeholder","messages":[],"max_tokens":1}' \
+        2>/dev/null || echo "{}")
+
+    # GLM may return error about invalid model but still accept the key
+    # A 401 means invalid key
+    local http_code=$(curl -s -o /dev/null -w "%{http_code}" "${base_url}/chat/completions" \
+        -H "Authorization: Bearer ${api_key}" \
+        -H "Content-Type: application/json" \
+        -d '{"model":"test","messages":[],"max_tokens":1}' 2>/dev/null)
+
+    if [ "$http_code" = "401" ] || [ "$http_code" = "403" ]; then
+        echo -e " ${RED}✗${NC} (Invalid API key)" >&2
+        return 1
+    fi
+    echo -e " ${GREEN}✓${NC}" >&2
+    return 0
+}
+
+# Validate group chat ID
+validate_group_chat() {
+    local group_id="$1"
+    local bot_token="$2"
+
+    echo -n "  🔍 Validating group chat ID..." >&2
+    local response
+    response=$(curl -s "https://api.telegram.org/bot${bot_token}/sendChatAction?chat_id=${group_id}&action=typing" 2>/dev/null || echo '{"ok":false}')
+
+    if echo "$response" | grep -q '"ok":true'; then
+        echo -e " ${GREEN}✓${NC}" >&2
+        return 0
+    else
+        local error_desc=$(echo "$response" | grep -o '"description":"[^"]*"' | cut -d'"' -f4 || echo "Invalid group ID")
+        echo -e " ${RED}✗${NC} ($error_desc)" >&2
+        echo -e "     ${YELLOW}⚠ Bot may not be in group or lacks admin rights${NC}" >&2
+        return 1
+    fi
+}
 
 echo ""
 echo -e "${BLUE}${BOLD}╔══════════════════════════════════════════════╗${NC}"
@@ -67,6 +162,14 @@ if [ "$MODEL_CHOICE" = "1" ] || [ "$MODEL_CHOICE" = "3" ]; then
     if [ -z "$ANTHROPIC_KEY" ]; then
         echo -e "${RED}✗ Anthropic API key is required${NC}"
         exit 1
+    fi
+    # Validate the key (non-blocking if API is down, but warn on 401)
+    if ! validate_anthropic_key "$ANTHROPIC_KEY"; then
+        echo ""
+        read -r -p "API key validation failed. Continue anyway? [y/N]: " CONTINUE_ANYWAY
+        if [[ ! "$CONTINUE_ANYWAY" =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
     fi
     echo -e "${GREEN}✓ Anthropic key saved${NC}"
 fi
@@ -122,39 +225,97 @@ if [ "$MODEL_CHOICE" = "2" ] || [ "$MODEL_CHOICE" = "3" ]; then
         GLM_FALLBACK="glm-4-air"
         echo -e "${GREEN}→ Using Zhipu AI (glm-4 + glm-4-air)${NC}"
     fi
+
+    # Validate GLM key
+    if ! validate_glm_key "$GLM_API_KEY" "$GLM_BASE_URL"; then
+        echo ""
+        read -r -p "GLM API key validation failed. Continue anyway? [y/N]: " CONTINUE_ANYWAY
+        if [[ ! "$CONTINUE_ANYWAY" =~ ^[Yy]$ ]]; then
+            exit 1
+        fi
+    fi
 fi
 
 # ── Telegram Bot Tokens ─────────────────────────────────────
 echo ""
 echo -e "${BOLD}🤖 Telegram Bot Tokens${NC}"
 echo "──────────────────────────────────────────"
-echo "You need 5 bots. Create them all at @BotFather with /newbot"
+echo "You need 6 bots. Create them all at @BotFather with /newbot"
 echo "Each bot becomes a team member with its own identity:"
 echo ""
 echo "  1. FORGE Orchestrator  → e.g. @ForgeOrchestratorBot  (talks to YOU, coordinates team)"
 echo "  2. Project Manager     → e.g. @ForgePMBot             (12+ yr PM, requirements expert)"
-echo "  3. Architect           → e.g. @ForgeArchitectBot      (15+ yr architect, system design)"
-echo "  4. Developer           → e.g. @ForgeDevBot            (15+ yr engineer, production code)"
-echo "  5. Tester              → e.g. @ForgeQABot             (15+ yr QA, security & testing)"
+echo "  3. Meeting Bot         → e.g. @ForgeMeetingBot        (voice meetings, transcription)"
+echo "  4. Architect           → e.g. @ForgeArchitectBot      (15+ yr architect, system design)"
+echo "  5. Developer           → e.g. @ForgeDevBot            (15+ yr engineer, production code)"
+echo "  6. Tester              → e.g. @ForgeQABot             (15+ yr QA, security & testing)"
 echo ""
-echo -e "${YELLOW}Tip: Add all 5 to a Telegram group to watch them collaborate in real-time!${NC}"
+echo -e "${YELLOW}Tip: Add all 6 to a Telegram group to watch them collaborate in real-time!${NC}"
 echo ""
 
 read -r -p "1. FORGE Orchestrator bot token: " TOKEN_FORGE
 read -r -p "2. Project Manager bot token:    " TOKEN_PM
-read -r -p "3. Architect bot token:          " TOKEN_ARCH
-read -r -p "4. Developer bot token:          " TOKEN_DEV
-read -r -p "5. Tester bot token:             " TOKEN_TEST
+read -r -p "3. Meeting Bot bot token:        " TOKEN_MEETING
+read -r -p "4. Architect bot token:          " TOKEN_ARCH
+read -r -p "5. Developer bot token:          " TOKEN_DEV
+read -r -p "6. Tester bot token:             " TOKEN_TEST
 
-# Validate all 5 tokens
-for TOKEN_VAR in TOKEN_FORGE TOKEN_PM TOKEN_ARCH TOKEN_DEV TOKEN_TEST; do
+# Validate all 6 tokens are present
+for TOKEN_VAR in TOKEN_FORGE TOKEN_PM TOKEN_MEETING TOKEN_ARCH TOKEN_DEV TOKEN_TEST; do
     if [ -z "${!TOKEN_VAR}" ]; then
-        echo -e "${RED}✗ All 5 bot tokens are required.${NC}"
+        echo -e "${RED}✗ All 6 bot tokens are required.${NC}"
         echo "  Create them at @BotFather → /newbot"
         exit 1
     fi
 done
-echo -e "${GREEN}✓ All 5 bot tokens collected${NC}"
+
+# Validate each bot token with Telegram API
+echo ""
+echo -e "${YELLOW}▶ Validating bot tokens with Telegram...${NC}"
+VALIDATION_FAILED=0
+
+if ! validate_bot_token "$TOKEN_FORGE" "FORGE Orchestrator"; then
+    VALIDATION_FAILED=1
+fi
+if ! validate_bot_token "$TOKEN_PM" "Project Manager"; then
+    VALIDATION_FAILED=1
+fi
+if ! validate_bot_token "$TOKEN_MEETING" "Meeting Bot"; then
+    VALIDATION_FAILED=1
+fi
+if ! validate_bot_token "$TOKEN_ARCH" "Architect"; then
+    VALIDATION_FAILED=1
+fi
+if ! validate_bot_token "$TOKEN_DEV" "Developer"; then
+    VALIDATION_FAILED=1
+fi
+if ! validate_bot_token "$TOKEN_TEST" "Tester"; then
+    VALIDATION_FAILED=1
+fi
+
+if [ $VALIDATION_FAILED -eq 1 ]; then
+    echo ""
+    echo -e "${RED}✗ One or more bot tokens are invalid. Please check and try again.${NC}"
+    echo "  Common issues:"
+    echo "    - Token copied incorrectly (include everything after 'bot')"
+    echo "    - Bot was deleted or recreated at @BotFather"
+    echo "    - Network connection issues"
+    exit 1
+fi
+echo -e "${GREEN}✓ All 6 bot tokens validated${NC}"
+
+# ── GitHub Access ───────────────────────────────────────────
+echo ""
+echo -e "${BOLD}🐙 GitHub Token (for pushing code)${NC}"
+echo "──────────────────────────────────────────"
+echo "To allow the Developer bot to push code directly to GitHub,"
+echo "provide a GitHub Personal Access Token (PAT) with 'repo' scope."
+echo ""
+read -rs -p "GitHub Token (press Enter to skip): " GITHUB_TOKEN
+echo ""
+if [ -n "$GITHUB_TOKEN" ]; then
+    echo -e "${GREEN}✓ GitHub token collected${NC}"
+fi
 
 # ── Group Chat Setup ────────────────────────────────────────
 echo ""
@@ -172,6 +333,27 @@ echo "  6. Look for 'chat':{'id': -XXXXXXXXX} — that negative number is your G
 echo ""
 read -r -p "Group Chat ID (or press Enter to skip): " GROUP_CHAT_ID
 
+# Validate group chat ID if provided
+if [ -n "$GROUP_CHAT_ID" ]; then
+    echo ""
+    echo -e "${YELLOW}▶ Validating group chat access...${NC}"
+    if ! validate_group_chat "$GROUP_CHAT_ID" "$TOKEN_FORGE"; then
+        echo ""
+        echo -e "${YELLOW}⚠️  Group chat validation failed. Common fixes:${NC}"
+        echo "    - Add @ForgeOrchestratorBot to the group"
+        echo "    - Make the bot an admin in the group"
+        echo "    - Send a message in the group first"
+        echo "    - Disable privacy mode: @BotFather → /setprivacy → Disable"
+        echo ""
+        read -r -p "Continue with unvalidated group ID? [y/N]: " CONTINUE_ANYWAY
+        if [[ ! "$CONTINUE_ANYWAY" =~ ^[Yy]$ ]]; then
+            GROUP_CHAT_ID=""
+        fi
+    else
+        echo -e "${GREEN}✓ Group chat validated${NC}"
+    fi
+fi
+
 # ── Create directory structure ───────────────────────────────
 echo ""
 echo -e "${YELLOW}▶ Creating workspace structure...${NC}"
@@ -181,7 +363,7 @@ mkdir -p "$WORKSPACE_DIR"/{agents,projects}
 # Install skills
 mkdir -p "$WORKSPACE_DIR/skills"
 cp -r "$SCRIPT_DIR/skills/"* "$WORKSPACE_DIR/skills/"
-echo -e "${GREEN}✓ Skills installed (orchestrator, developer, architect, tester, PM)${NC}"
+echo -e "${GREEN}✓ Skills installed (orchestrator, developer, architect, tester, PM, meeting-mode)${NC}"
 
 # Install agent system prompts (SOUL + role merged)
 echo -e "${YELLOW}▶ Installing world-class agent prompts...${NC}"
@@ -197,10 +379,11 @@ merge_agent() {
     cat "$role_file" >> "$output_file"
 }
 
-merge_agent "$SCRIPT_DIR/agents/pm-soul.md"        "$SCRIPT_DIR/agents/pm.md"        "$WORKSPACE_DIR/agents/pm.md"
-merge_agent "$SCRIPT_DIR/agents/architect-soul.md" "$SCRIPT_DIR/agents/architect.md" "$WORKSPACE_DIR/agents/architect.md"
-merge_agent "$SCRIPT_DIR/agents/developer-soul.md" "$SCRIPT_DIR/agents/developer.md" "$WORKSPACE_DIR/agents/developer.md"
-merge_agent "$SCRIPT_DIR/agents/tester-soul.md"    "$SCRIPT_DIR/agents/tester.md"    "$WORKSPACE_DIR/agents/tester.md"
+merge_agent "$SCRIPT_DIR/agents/pm-soul.md"        "$SCRIPT_DIR/agents/pm.md"        "$WORKSPACE_DIR/agents/pm-agent.md"
+merge_agent "$SCRIPT_DIR/agents/meeting-soul.md"    "$SCRIPT_DIR/agents/meeting.md"    "$WORKSPACE_DIR/agents/meeting-agent.md"
+merge_agent "$SCRIPT_DIR/agents/architect-soul.md" "$SCRIPT_DIR/agents/architect.md" "$WORKSPACE_DIR/agents/architect-agent.md"
+merge_agent "$SCRIPT_DIR/agents/developer-soul.md" "$SCRIPT_DIR/agents/developer.md" "$WORKSPACE_DIR/agents/developer-agent.md"
+merge_agent "$SCRIPT_DIR/agents/tester-soul.md"    "$SCRIPT_DIR/agents/tester.md"    "$WORKSPACE_DIR/agents/tester-agent.md"
 echo -e "${GREEN}✓ Agent prompts installed (world-class expertise + personalities)${NC}"
 
 # Install SOUL.md and AGENTS.md
@@ -317,9 +500,39 @@ echo -e "${YELLOW}▶ Writing OpenClaw configuration...${NC}"
 
 BACKUP_FILE=""
 if [ -f "$OPENCLAW_DIR/openclaw.json" ]; then
-    BACKUP_FILE="$OPENCLAW_DIR/openclaw.json.backup.$(date +%s)"
-    cp "$OPENCLAW_DIR/openclaw.json" "$BACKUP_FILE"
-    echo -e "${YELLOW}  ⚠ Existing config backed up to: $BACKUP_FILE${NC}"
+    echo ""
+    echo -e "${YELLOW}⚠️  Existing configuration found at $OPENCLAW_DIR/openclaw.json${NC}"
+    echo ""
+    echo "What would you like to do?"
+    echo "  1) Backup and overwrite (recommended)"
+    echo "  2) View current config then decide"
+    echo "  3) Exit and keep existing"
+    echo ""
+    read -r -p "Choice [1/2/3]: " OVERWRITE_CHOICE
+
+    case "$OVERWRITE_CHOICE" in
+        2)
+            echo ""
+            echo "--- Current openclaw.json ---"
+            cat "$OPENCLAW_DIR/openclaw.json"
+            echo "----------------------------"
+            echo ""
+            read -r -p "Press Enter to continue, or Ctrl+C to exit..."
+            BACKUP_FILE="$OPENCLAW_DIR/openclaw.json.backup.$(date +%s)"
+            cp "$OPENCLAW_DIR/openclaw.json" "$BACKUP_FILE"
+            echo -e "${YELLOW}  ⚠ Existing config backed up to: $BACKUP_FILE${NC}"
+            ;;
+        3)
+            echo ""
+            echo -e "${GREEN}✓ Exiting. Configuration unchanged.${NC}"
+            exit 0
+            ;;
+        *)
+            BACKUP_FILE="$OPENCLAW_DIR/openclaw.json.backup.$(date +%s)"
+            cp "$OPENCLAW_DIR/openclaw.json" "$BACKUP_FILE"
+            echo -e "${YELLOW}  ⚠ Existing config backed up to: $BACKUP_FILE${NC}"
+            ;;
+    esac
 fi
 
 cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
@@ -351,6 +564,12 @@ cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
         "name": "Project Manager",
         "workspace": "${WORKSPACE_DIR}",
         "identity": { "name": "PM", "emoji": "📋" }
+      },
+      {
+        "id": "meeting-agent",
+        "name": "Meeting Bot",
+        "workspace": "${WORKSPACE_DIR}",
+        "identity": { "name": "Meeting", "emoji": "🎙️" }
       },
       {
         "id": "architect-agent",
@@ -391,6 +610,12 @@ cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
           "groupPolicy": "open",
           "streaming": "off"
         },
+        "meeting": {
+          "dmPolicy": "pairing",
+          "botToken": "${TOKEN_MEETING}",
+          "groupPolicy": "open",
+          "streaming": "off"
+        },
         "architect": {
           "dmPolicy": "pairing",
           "botToken": "${TOKEN_ARCH}",
@@ -420,6 +645,10 @@ cat > "$OPENCLAW_DIR/openclaw.json" << JSONEOF
     {
       "match": { "channel": "telegram", "accountId": "pm" },
       "agentId": "pm-agent"
+    },
+    {
+      "match": { "channel": "telegram", "accountId": "meeting" },
+      "agentId": "meeting-agent"
     },
     {
       "match": { "channel": "telegram", "accountId": "architect" },
@@ -455,20 +684,32 @@ JSONEOF
 
 echo -e "${GREEN}✓ Config written to $OPENCLAW_DIR/openclaw.json${NC}"
 
-# ── Save AWS credentials for start.sh ─────────────────────────
+# ── Save Environment Variables for start.sh ─────────────────────
+ENV_FILE="$HOME/.forge-env"
+> "$ENV_FILE"
+chmod 600 "$ENV_FILE"
+
 if [ -n "$AWS_ACCESS_KEY_ID" ]; then
-    CREDENTIALS_FILE="$HOME/.aws-bedrock-creds"
-    cat > "$CREDENTIALS_FILE" << CREDFILE
+    cat >> "$ENV_FILE" << CREDFILE
 # AWS Bedrock credentials for OpenClaw
 export AWS_ACCESS_KEY_ID="${AWS_ACCESS_KEY_ID}"
 export AWS_SECRET_ACCESS_KEY="${AWS_SECRET_ACCESS_KEY}"
 export AWS_REGION="${AWS_REGION}"
 CREDFILE
     if [ -n "$AWS_SESSION_TOKEN" ]; then
-        echo "export AWS_SESSION_TOKEN=\"${AWS_SESSION_TOKEN}\"" >> "$CREDENTIALS_FILE"
+        echo "export AWS_SESSION_TOKEN=\"${AWS_SESSION_TOKEN}\"" >> "$ENV_FILE"
     fi
-    chmod 600 "$CREDENTIALS_FILE"
-    echo -e "${GREEN}✓ AWS credentials saved to $CREDENTIALS_FILE${NC}"
+    echo -e "${GREEN}✓ AWS credentials saved to $ENV_FILE${NC}"
+    # Keep backward-compatible file
+    cp "$ENV_FILE" "$HOME/.aws-bedrock-creds" 2>/dev/null || true
+fi
+
+if [ -n "$GITHUB_TOKEN" ]; then
+    cat >> "$ENV_FILE" << CREDFILE
+# GitHub token for Developer bot
+export GITHUB_TOKEN="${GITHUB_TOKEN}"
+CREDFILE
+    echo -e "${GREEN}✓ GitHub token saved to $ENV_FILE${NC}"
 fi
 
 # ── Set file permissions ─────────────────────────────────────
@@ -482,9 +723,10 @@ echo -e "${GREEN}${BOLD}╔═════════════════�
 echo -e "${GREEN}${BOLD}║   ✅ FORGE Virtual Team v2 — Setup Complete!      ║${NC}"
 echo -e "${GREEN}${BOLD}╚════════════════════════════════════════════════════╝${NC}"
 echo ""
-echo -e "${BOLD}Your 5-bot team of WORLD-CLASS experts:${NC}"
+echo -e "${BOLD}Your 6-bot team of WORLD-CLASS experts:${NC}"
 echo "  🦞 FORGE (Orchestrator)   — your CTO contact"
 echo "  📋 Project Manager (12yr) — requirements & specs expert"
+echo "  🎙️ Meeting Bot            — voice meetings + real-time transcription"
 echo "  🏗️  Architect (15yr)       — system design master"
 echo "  💻 Developer (15yr)        — security-first production coder"
 echo "  🧪 Tester (15yr)           — OWASP security + 5-gate QA"
@@ -510,7 +752,7 @@ echo ""
 echo -e "${BOLD}Next Steps:${NC}"
 echo "  1. Start: ./start.sh  (or: openclaw gateway)"
 echo "  2. Stop:  ./stop.sh   (or: openclaw gateway stop)"
-echo "  3. Message your FORGE bot on Telegram → type /new"
+echo "  3. Message your FORGE bot on Telegram → type /new or /meeting"
 echo ""
 
 if [ -n "$GROUP_CHAT_ID" ]; then

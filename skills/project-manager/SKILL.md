@@ -116,7 +116,7 @@ metadata:
 
 All files must be valid Markdown with no placeholders left unfilled.
 
-Save files as:
+Save files as (MUST BE EXACTLY THESE NAMES, STRICTLY LOWERCASE):
 - `[project_path]/pm/brd.md`
 - `[project_path]/pm/sow.md`
 - `[project_path]/pm/fsd.md`
